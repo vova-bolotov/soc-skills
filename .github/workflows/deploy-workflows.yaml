@@ -1,0 +1,160 @@
+name: Deploy Fusion Workflows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'workflows/**/*.yaml'
+      - 'workflows/**/*.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'workflows/**/*.yaml'
+      - 'workflows/**/*.yml'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Validate only, do not deploy'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  SCRIPTS_PATH: plugins/fusion-workflows/skills/fusion-workflows/scripts
+  # AWS account where the secret is stored
+  AWS_ACCOUNT_ID: '123456789012'  # TODO: Replace with your AWS account ID
+  AWS_REGION: eu-west-1
+  # Secret name in AWS Secrets Manager
+  AWS_SECRET_NAME: crowdstrike/fusion-api
+
+jobs:
+  validate:
+    name: Validate Workflows
+    runs-on: as24-base-arm
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/github-actions-${{ github.event.repository.name }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Fetch secrets from AWS Secrets Manager
+        id: secrets
+        run: |
+          secret_json=$(aws secretsmanager get-secret-value \
+            --secret-id "${{ env.AWS_SECRET_NAME }}" \
+            --query SecretString --output text)
+          echo "::add-mask::$(echo $secret_json | jq -r '.CS_CLIENT_ID')"
+          echo "::add-mask::$(echo $secret_json | jq -r '.CS_CLIENT_SECRET')"
+          echo "CS_CLIENT_ID=$(echo $secret_json | jq -r '.CS_CLIENT_ID')" >> $GITHUB_ENV
+          echo "CS_CLIENT_SECRET=$(echo $secret_json | jq -r '.CS_CLIENT_SECRET')" >> $GITHUB_ENV
+          echo "CS_BASE_URL=$(echo $secret_json | jq -r '.CS_BASE_URL')" >> $GITHUB_ENV
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests pyyaml
+
+      - name: Find workflow files
+        id: find-files
+        run: |
+          files=$(find workflows -name "*.yaml" -o -name "*.yml" 2>/dev/null | tr '\n' ' ' || echo "")
+          echo "files=$files" >> $GITHUB_OUTPUT
+          if [ -z "$files" ]; then
+            echo "No workflow files found in workflows/"
+            echo "found=false" >> $GITHUB_OUTPUT
+          else
+            echo "Found workflows: $files"
+            echo "found=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Validate workflows
+        if: steps.find-files.outputs.found == 'true'
+        run: |
+          exit_code=0
+          for f in ${{ steps.find-files.outputs.files }}; do
+            echo "::group::Validating $f"
+            if ! python ${{ env.SCRIPTS_PATH }}/validate.py "$f"; then
+              exit_code=1
+              echo "::error file=$f::Validation failed"
+            fi
+            echo "::endgroup::"
+          done
+          exit $exit_code
+
+  deploy:
+    name: Deploy to CrowdStrike
+    runs-on: as24-base-arm
+    needs: validate
+    if: |
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event.inputs.dry_run != 'true' || github.event.inputs.dry_run == null)
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/github-actions-${{ github.event.repository.name }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Fetch secrets from AWS Secrets Manager
+        run: |
+          secret_json=$(aws secretsmanager get-secret-value \
+            --secret-id "${{ env.AWS_SECRET_NAME }}" \
+            --query SecretString --output text)
+          echo "::add-mask::$(echo $secret_json | jq -r '.CS_CLIENT_ID')"
+          echo "::add-mask::$(echo $secret_json | jq -r '.CS_CLIENT_SECRET')"
+          echo "CS_CLIENT_ID=$(echo $secret_json | jq -r '.CS_CLIENT_ID')" >> $GITHUB_ENV
+          echo "CS_CLIENT_SECRET=$(echo $secret_json | jq -r '.CS_CLIENT_SECRET')" >> $GITHUB_ENV
+          echo "CS_BASE_URL=$(echo $secret_json | jq -r '.CS_BASE_URL')" >> $GITHUB_ENV
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests pyyaml
+
+      - name: Find workflow files
+        id: find-files
+        run: |
+          files=$(find workflows -name "*.yaml" -o -name "*.yml" 2>/dev/null | tr '\n' ' ' || echo "")
+          echo "files=$files" >> $GITHUB_OUTPUT
+
+      - name: Deploy workflows
+        if: steps.find-files.outputs.files != ''
+        run: |
+          echo "Deploying workflows to CrowdStrike..."
+          python ${{ env.SCRIPTS_PATH }}/import_workflow.py \
+            --skip-validate \
+            ${{ steps.find-files.outputs.files }}
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deployed Files" >> $GITHUB_STEP_SUMMARY
+          for f in ${{ steps.find-files.outputs.files }}; do
+            echo "- \`$f\`" >> $GITHUB_STEP_SUMMARY
+          done
