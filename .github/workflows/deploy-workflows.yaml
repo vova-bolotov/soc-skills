@@ -20,7 +20,7 @@ on:
         type: boolean
 
 env:
-  SCRIPTS_PATH: plugins/fusion-workflows/skills/fusion-workflows/scripts
+  SCRIPTS_PATH: skills/fusion-workflows/scripts
   # AWS account where the secret is stored
   AWS_ACCOUNT_ID: '123456789012'  # TODO: Replace with your AWS account ID
   AWS_REGION: eu-west-1

@@ -1,75 +1,65 @@
-# Security Skills for Claude Code
+# CrowdStrike Fusion Workflows
 
-A plugin marketplace of [Claude Code skills](https://docs.anthropic.com/en/docs/claude-code/skills) that automate security operations.
+A [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/skills) for creating, validating, and deploying CrowdStrike Falcon Fusion SOAR workflows.
 
-Install individual skills to automate specific platforms, or combine several for end-to-end integration across your security stack.
+## Features
 
-## Available Skills
-
-| Skill | Platform | What It Does |
-|-------|----------|--------------|
-| [fusion-workflows](plugins/fusion-workflows/skills/fusion-workflows/) | CrowdStrike Falcon Fusion SOAR | Create, validate, import, execute, and export Fusion SOAR workflows. Discovers actions via the live API, authors YAML with correct schema and data references, handles CEL expressions, loop/conditional patterns, and manages the full workflow lifecycle. |
-
-*More skills coming soon.*
+- Discover actions and triggers via the live CrowdStrike API
+- Author workflows in YAML with correct schema and data references
+- Handle CEL expressions, loop/conditional patterns
+- Validate workflows before deployment
+- Deploy via CI/CD pipeline with AWS Secrets Manager
 
 ## Getting Started
 
 ### Prerequisites
 
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) (or Skills compatible) CLI installed
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) CLI installed
 - For CI/CD deployment: AWS account with Secrets Manager and GitHub Actions OIDC configured
 
-### Install via Plugin Marketplace
+### Installation
 
-```bash
-/plugin marketplace add https://github.com/eth0izzle/security-skills.git
-/plugin install SKILL-NAME@security-skills
-```
+**Via Marketplace:**
 
-Replacing `SKILL-NAME` with the desired skill name you want to install.
+This plugin can be installed from a Claude Code marketplace that includes it.
 
-### Manual Setup
-
-If you prefer to install manually:
-
-1. Clone the repository:
+**Manual Installation:**
 
 ```bash
 git clone https://github.com/eth0izzle/security-skills.git
 cd security-skills
-cp -r plugins/ ~/.claude/plugins/
 ```
 
-2. Start Claude Code in the project directory:
+Then start Claude Code in the directory:
 
 ```bash
 claude
 ```
 
-3. Ask Claude to build something:
+### Usage
+
+Ask Claude to build workflows:
 
 ```
-/plan
 > Create a workflow that contains a device and sends a Slack notification
 > Create multiple workflows based on the attached BEC Playbook
 > What CrowdStrike actions are available to help with forensics capture?
 ```
 
-Claude will automatically use the appropriate skill based on your request.
+Claude will automatically use the skill based on your request.
 
 ## Repository Structure
 
 ```
 soc-skills/
+├── .claude-plugin/plugin.json    # Plugin manifest
+├── skills/fusion-workflows/      # Skill definition
+│   ├── SKILL.md                  # Skill instructions for Claude
+│   ├── scripts/                  # CLI tools for CrowdStrike API
+│   ├── references/               # Schema docs, best practices
+│   └── assets/                   # YAML templates
 ├── workflows/                    # Production workflows (deployed via CI/CD)
 ├── examples/fusion-workflows/    # Reference examples (not deployed)
-├── plugins/                      # Claude Code skill definitions
-│   └── fusion-workflows/
-│       └── skills/fusion-workflows/
-│           ├── SKILL.md          # Skill definition
-│           ├── scripts/          # CLI tools for CrowdStrike API
-│           ├── references/       # Schema docs, best practices
-│           └── assets/           # YAML templates
 └── .github/workflows/            # CI/CD pipeline
 ```
 
@@ -104,32 +94,15 @@ The pipeline uses OIDC to authenticate to AWS — no credentials are stored in G
 2. Create secret `crowdstrike/fusion-api` in AWS Secrets Manager
 3. Update `AWS_ACCOUNT_ID` in `.github/workflows/deploy-workflows.yaml`
 
-See [SKILL.md](plugins/fusion-workflows/skills/fusion-workflows/SKILL.md) for detailed setup instructions.
+See [SKILL.md](skills/fusion-workflows/SKILL.md) for detailed setup instructions.
 
-## Using Skills Directly
+## Skill Contents
 
-Each skill lives under `plugins/<plugin-name>/skills/<skill-name>/` and includes:
-
-- `SKILL.md` — the skill definition that Claude loads automatically
-- `scripts/` — CLI tools for interacting with the platform API
-- `references/` — schema docs, expression syntax, best practices
-- `assets/` — templates and starter files
-
-## Contributing
-
-To add a new security skill:
-
-1. Create a plugin directory under `plugins/<plugin-name>/`
-2. Add a `.claude-plugin/plugin.json` manifest
-3. Create the skill under `plugins/<plugin-name>/skills/<skill-name>/`
-4. Write a `SKILL.md` that describes the skill's capabilities, prerequisites, and step-by-step workflow
-5. Add scripts for API interaction, validation, and deployment
-6. Add reference docs for schema, syntax, and best practices
-7. Add template assets for common patterns
-8. Register the plugin in `.claude-plugin/marketplace.json`
-9. Submit a pull request
-
-See the [fusion-workflows skill](plugins/fusion-workflows/skills/fusion-workflows/SKILL.md) as a reference implementation.
+| Directory | Contents |
+|-----------|----------|
+| `scripts/` | CLI tools: `action_search.py`, `validate.py`, `import_workflow.py`, `execute.py`, `export.py` |
+| `references/` | `yaml-schema.md`, `cel-expressions.md`, `trigger-types.md`, `best-practices.md` |
+| `assets/` | YAML templates for common workflow patterns |
 
 ## License
 

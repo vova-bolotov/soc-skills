@@ -1,5 +1,0 @@
-{
-  "name": "fusion-workflows",
-  "description": "Create, validate, import, execute, and export CrowdStrike Falcon Fusion SOAR workflows using natural language.",
-  "version": "1.0.0"
-}

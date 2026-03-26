@@ -1,0 +1,14 @@
+{
+  "name": "fusion-workflows",
+  "description": "Create, validate, import, execute, and export CrowdStrike Falcon Fusion SOAR workflows using natural language.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Paul Price",
+    "email": "paul@darkport.co.uk"
+  },
+  "homepage": "https://darkport.co.uk",
+  "repository": "https://github.com/eth0izzle/security-skills",
+  "license": "MIT",
+  "keywords": ["crowdstrike", "falcon", "fusion", "soar", "workflow", "security"],
+  "category": "security"
+}
