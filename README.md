@@ -1,6 +1,6 @@
 # CrowdStrike Fusion Workflows
 
-A [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/skills) for creating, validating, and deploying CrowdStrike Falcon Fusion SOAR workflows.
+A [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/skills) for creating and validating CrowdStrike Falcon Fusion SOAR workflows.
 
 ## Features
 
@@ -8,14 +8,12 @@ A [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/skills) fo
 - Author workflows in YAML with correct schema and data references
 - Handle CEL expressions, loop/conditional patterns
 - Validate workflows before deployment
-- Deploy via CI/CD pipeline with AWS Secrets Manager
 
 ## Getting Started
 
 ### Prerequisites
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) CLI installed
-- For CI/CD deployment: AWS account with Secrets Manager and GitHub Actions OIDC configured
 
 ### Installation
 
@@ -26,13 +24,8 @@ This plugin can be installed from a Claude Code marketplace that includes it.
 **Manual Installation:**
 
 ```bash
-git clone https://github.com/eth0izzle/security-skills.git
-cd security-skills
-```
-
-Then start Claude Code in the directory:
-
-```bash
+git clone https://github.com/AutoScout24/soc-skills.git
+cd soc-skills
 claude
 ```
 
@@ -58,43 +51,12 @@ soc-skills/
 │   ├── scripts/                  # CLI tools for CrowdStrike API
 │   ├── references/               # Schema docs, best practices
 │   └── assets/                   # YAML templates
-├── workflows/                    # Production workflows (deployed via CI/CD)
-├── examples/fusion-workflows/    # Reference examples (not deployed)
-└── .github/workflows/            # CI/CD pipeline
+└── examples/fusion-workflows/    # Reference examples
 ```
 
-## CI/CD Deployment
+## Deploying Workflows
 
-Workflows in the `workflows/` directory are automatically deployed to CrowdStrike via GitHub Actions.
-
-### Pipeline Flow
-
-| Event | Action |
-|-------|--------|
-| PR to `main` | Validates workflows against CrowdStrike API |
-| Merge to `main` | Deploys workflows to CrowdStrike |
-
-### Credentials
-
-Credentials are stored in **AWS Secrets Manager** (not in the repository):
-
-```json
-{
-  "CS_CLIENT_ID": "your-client-id",
-  "CS_CLIENT_SECRET": "your-client-secret",
-  "CS_BASE_URL": "https://api.crowdstrike.com"
-}
-```
-
-The pipeline uses OIDC to authenticate to AWS — no credentials are stored in GitHub.
-
-### Setup Requirements
-
-1. Create IAM role `github-actions-<repo-name>` with SecretsManager read access
-2. Create secret `crowdstrike/fusion-api` in AWS Secrets Manager
-3. Update `AWS_ACCOUNT_ID` in `.github/workflows/deploy-workflows.yaml`
-
-See [SKILL.md](skills/fusion-workflows/SKILL.md) for detailed setup instructions.
+Generated workflows should be committed to [soc-soar-workflows](https://github.com/AutoScout24/soc-soar-workflows) for CI/CD deployment to CrowdStrike.
 
 ## Skill Contents
 
@@ -104,6 +66,19 @@ See [SKILL.md](skills/fusion-workflows/SKILL.md) for detailed setup instructions
 | `references/` | `yaml-schema.md`, `cel-expressions.md`, `trigger-types.md`, `best-practices.md` |
 | `assets/` | YAML templates for common workflow patterns |
 
-## License
+## Local Development
 
-MIT
+Set credentials in your terminal session (not persisted):
+
+```bash
+export CS_CLIENT_ID="your-client-id"
+export CS_CLIENT_SECRET="your-client-secret"
+export CS_BASE_URL="https://api.crowdstrike.com"
+```
+
+Then use the scripts directly:
+
+```bash
+python skills/fusion-workflows/scripts/action_search.py --search "contain"
+python skills/fusion-workflows/scripts/validate.py my-workflow.yaml
+```
