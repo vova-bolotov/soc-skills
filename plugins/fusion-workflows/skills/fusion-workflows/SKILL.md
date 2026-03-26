@@ -51,27 +51,63 @@ workflows — from discovering actions to exporting production definitions.
 ## Prerequisites
 
 - Python 3.8+ with `requests` library installed
-- CrowdStrike API credentials in a `.env` file (see Credentials below)
 - Falcon Fusion SOAR access in the target CID
+- For CI/CD deployment: GitHub Actions with AWS Secrets Manager (recommended)
+- For local development: Environment variables set in your shell session
 
 ## Credentials
 
-Credentials are loaded from a `.env` file. The search order is:
-1. Path in `CS_ENV_FILE` environment variable
-2. Walk upward from the scripts directory looking for `.env`
-3. Project root `.env`
+**IMPORTANT:** Never store CrowdStrike credentials in plain text files (`.env` files) in
+the repository. This is a security risk and violates best practices.
 
-Required variables:
-```
-CS_CLIENT_ID=<your_client_id>
-CS_CLIENT_SECRET=<your_client_secret>
-CS_BASE_URL=https://api.crowdstrike.com
+### Recommended: CI/CD with AWS Secrets Manager
+
+Credentials are stored securely in AWS Secrets Manager and fetched at runtime by the
+GitHub Actions pipeline. This is the default deployment method.
+
+**Secret structure in AWS Secrets Manager:**
+```json
+{
+  "CS_CLIENT_ID": "your-client-id",
+  "CS_CLIENT_SECRET": "your-client-secret",
+  "CS_BASE_URL": "https://api.crowdstrike.com"
+}
 ```
 
-Test credentials:
+The CI/CD pipeline (`.github/workflows/deploy-workflows.yaml`) automatically:
+1. Authenticates to AWS via OIDC
+2. Fetches credentials from Secrets Manager
+3. Sets them as environment variables for the scripts
+
+### Local Development (temporary session only)
+
+For local testing, export credentials as environment variables in your terminal session.
+**Do not persist these in any file.**
+
 ```bash
+# Set for current session only (not saved to disk)
+export CS_CLIENT_ID="your-client-id"
+export CS_CLIENT_SECRET="your-client-secret"
+export CS_BASE_URL="https://api.crowdstrike.com"
+
+# Test credentials
 python scripts/cs_auth.py
 ```
+
+Alternatively, use a secrets manager CLI:
+```bash
+# Example with AWS CLI
+eval $(aws secretsmanager get-secret-value \
+  --secret-id crowdstrike/fusion-api \
+  --query SecretString --output text | \
+  jq -r 'to_entries | .[] | "export \(.key)=\(.value)"')
+```
+
+### Required API Scopes
+
+The CrowdStrike API credentials need the following scopes:
+- `Workflow: Read` — for action/trigger discovery and validation
+- `Workflow: Write` — for importing and executing workflows
 
 ---
 
@@ -286,8 +322,31 @@ API validation:
 
 ### Step 6 — Import
 
-Import the validated workflow into CrowdStrike. The import script automatically
-checks for duplicate workflow names before importing.
+#### Option A: CI/CD Pipeline (Recommended)
+
+Place the validated YAML in the `workflows/` directory and push to GitHub:
+
+```bash
+# Move workflow to deployment directory
+mv my-workflow.yaml workflows/
+
+# Create PR for review
+git checkout -b add-my-workflow
+git add workflows/my-workflow.yaml
+git commit -m "Add my-workflow"
+git push -u origin add-my-workflow
+
+# Create PR — CI will validate automatically
+gh pr create --title "Add my-workflow"
+
+# After approval and merge to main, CD deploys to CrowdStrike
+```
+
+The pipeline validates on PR and deploys on merge to `main`.
+
+#### Option B: Manual Import (Local Development)
+
+For testing or one-off imports with credentials in your environment:
 
 ```bash
 # Validate + duplicate check + import
@@ -407,6 +466,46 @@ All scripts are in the `scripts/` directory. Run with `python scripts/<name>.py`
 | `/workflows/entities/definitions/export/v1` | GET | export.py |
 | `/workflows/combined/definitions/v1` | GET | query_workflows.py, export.py, import_workflow.py |
 | `/workflows/entities/definitions/v1` | GET | execute.py (parameter schema) |
+
+---
+
+## CI/CD Deployment
+
+Workflows are deployed via GitHub Actions with credentials from AWS Secrets Manager.
+
+### Directory Structure
+
+```
+soc-skills/
+├── workflows/                    # Production workflows (deployed on merge)
+│   └── *.yaml
+├── examples/fusion-workflows/    # Reference examples (NOT deployed)
+└── .github/workflows/
+    └── deploy-workflows.yaml     # CI/CD pipeline
+```
+
+### Pipeline Flow
+
+| Trigger | Job | Action |
+|---------|-----|--------|
+| PR to `main` | `validate` | Validates all `workflows/**/*.yaml` via API dry-run |
+| Push to `main` | `deploy` | Imports validated workflows to CrowdStrike |
+| Manual dispatch | Both | Can run validation-only with `dry_run: true` |
+
+### Secrets Configuration
+
+Credentials are stored in AWS Secrets Manager (secret name: `crowdstrike/fusion-api`):
+
+```json
+{
+  "CS_CLIENT_ID": "...",
+  "CS_CLIENT_SECRET": "...",
+  "CS_BASE_URL": "https://api.crowdstrike.com"
+}
+```
+
+The GitHub Actions workflow uses OIDC to authenticate to AWS — no AWS credentials
+are stored in GitHub.
 
 **5. Validate:**
 ```bash
