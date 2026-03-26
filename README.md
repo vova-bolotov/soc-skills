@@ -17,6 +17,7 @@ Install individual skills to automate specific platforms, or combine several for
 ### Prerequisites
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) (or Skills compatible) CLI installed
+- For CI/CD deployment: AWS account with Secrets Manager and GitHub Actions OIDC configured
 
 ### Install via Plugin Marketplace
 
@@ -39,15 +40,13 @@ cd security-skills
 cp -r plugins/ ~/.claude/plugins/
 ```
 
-2. Some skills may require configuration. For example, the CrowdStrike Fusion workflow requires an API key to understand your live environment and optimise your workflows.
-
-3. Start Claude Code in the project directory:
+2. Start Claude Code in the project directory:
 
 ```bash
 claude
 ```
 
-4. Ask Claude to build something:
+3. Ask Claude to build something:
 
 ```
 /plan
@@ -58,7 +57,56 @@ claude
 
 Claude will automatically use the appropriate skill based on your request.
 
-### Using a Skill Directly
+## Repository Structure
+
+```
+soc-skills/
+├── workflows/                    # Production workflows (deployed via CI/CD)
+├── examples/fusion-workflows/    # Reference examples (not deployed)
+├── plugins/                      # Claude Code skill definitions
+│   └── fusion-workflows/
+│       └── skills/fusion-workflows/
+│           ├── SKILL.md          # Skill definition
+│           ├── scripts/          # CLI tools for CrowdStrike API
+│           ├── references/       # Schema docs, best practices
+│           └── assets/           # YAML templates
+└── .github/workflows/            # CI/CD pipeline
+```
+
+## CI/CD Deployment
+
+Workflows in the `workflows/` directory are automatically deployed to CrowdStrike via GitHub Actions.
+
+### Pipeline Flow
+
+| Event | Action |
+|-------|--------|
+| PR to `main` | Validates workflows against CrowdStrike API |
+| Merge to `main` | Deploys workflows to CrowdStrike |
+
+### Credentials
+
+Credentials are stored in **AWS Secrets Manager** (not in the repository):
+
+```json
+{
+  "CS_CLIENT_ID": "your-client-id",
+  "CS_CLIENT_SECRET": "your-client-secret",
+  "CS_BASE_URL": "https://api.crowdstrike.com"
+}
+```
+
+The pipeline uses OIDC to authenticate to AWS — no credentials are stored in GitHub.
+
+### Setup Requirements
+
+1. Create IAM role `github-actions-<repo-name>` with SecretsManager read access
+2. Create secret `crowdstrike/fusion-api` in AWS Secrets Manager
+3. Update `AWS_ACCOUNT_ID` in `.github/workflows/deploy-workflows.yaml`
+
+See [SKILL.md](plugins/fusion-workflows/skills/fusion-workflows/SKILL.md) for detailed setup instructions.
+
+## Using Skills Directly
 
 Each skill lives under `plugins/<plugin-name>/skills/<skill-name>/` and includes:
 
